@@ -1,0 +1,438 @@
+// this section includes packages 
+#include "splashkit.h" 
+#include "utilities.h"
+
+using std::to_string;
+
+// define the size of the habit array and the current day index
+const int SIZE = 100;
+int today_index = 0;
+
+// this enum defines the categories of habits
+enum categories
+{
+    HEALTH,
+    FITNESS,
+    STUDY,
+    HOBBY,
+    OTHER
+};
+
+// this struct defines the properties of a habit
+struct habit
+{
+    string name;
+    int target;
+    int current_streak;
+    categories category;
+    bool log[28];
+};
+
+// this struct defines the application data
+struct app_data
+{
+    habit habits[SIZE];
+    int habit_count;
+    int current_day;
+};
+
+// this function converts a category enum to a string representation to display to the user
+string category_to_string(categories category)
+{
+    switch (category)
+    {
+    case HEALTH:
+        return "Health";
+    case FITNESS:
+        return "Fitness";
+    case STUDY:
+        return "Study";
+    case HOBBY:
+        return "Hobby";
+    case OTHER:
+        return "Other";
+    default:
+        return "Unknown";
+    }
+}
+
+// this function adds a new habit to the application data
+void add_habit(app_data &data)
+{
+    if (data.habit_count >= SIZE) // Check if we can add more habits
+    {
+        write_line("Habit limit reached. Cannot add more habits.");
+        return;
+    }
+
+    habit new_habit; // Create a new habit instance
+
+    // Get habit details from the user
+    new_habit.name = read_string("Enter habit name: ");
+    new_habit.target = read_integer("Enter target (number of days): ");
+
+    write_line();
+    write_line("Select category:");
+    write_line("1: Health");
+    write_line("2: Fitness");
+    write_line("3: Study");
+    write_line("4: Hobby");
+    write_line("5: Other");
+    int category_choice = read_integer("Enter your choice: ", 1, 5);
+    new_habit.category = (categories)(category_choice - 1);
+
+    // Initialize the log and current streak for the new habit
+    for (int i = 0; i < 28; i++)
+    {
+        new_habit.log[i] = false;
+    }
+
+    new_habit.current_streak = 0;
+    
+    // Add the new habit to the data.habits array
+    data.habits[data.habit_count] = new_habit;
+    data.habit_count++;
+
+    // Confirm addition to the user
+    write_line("Habit added successfully!");
+}
+
+// this function removes a habit from the application data
+void remove_habit(app_data &data)
+{
+    // Check if there are any habits to remove
+    if (data.habit_count == 0)
+    {
+        write_line("No habits to remove.");
+        return;
+    }
+
+    // Display current habits
+    write_line("Current Habits: ");
+    for (int i = 0; i < data.habit_count; i++)
+    {
+        write_line(to_string(i + 1) + ". " + data.habits[i].name);
+    }
+
+    // Get the index of the habit to remove from the user
+    int index = read_integer("Enter the index of the habit to remove: ") - 1;
+
+    // Validate the index
+    if (index < 0 || index >= data.habit_count)
+    {
+        write_line("Invalid index.");
+        return;
+    }
+
+    // Shift habits to remove the selected habit
+    for (int i = index; i < data.habit_count - 1; i++)
+    {
+        data.habits[i] = data.habits[i + 1];
+    }
+    data.habit_count--;
+
+    // Confirm removal to the user
+    write_line("Habit removed successfully!");
+
+}
+
+// this function generates a report of all habits in the application data
+void habit_report(const app_data &data)
+{
+    // Check if there are any habits to report
+    if (data.habit_count == 0)
+    {
+        write_line("No habits to report.");
+        return;
+    }
+
+    // Display the habit report
+    write_line("Habit Report:");
+    for (int i = 0; i < data.habit_count; i++)
+    {
+        const habit &h = data.habits[i];
+        write_line("Habit: " + h.name + ", Target: " + to_string(h.target) + ", Current Streak: " + to_string(h.current_streak) + ", Category: " + category_to_string(h.category));
+    }
+}
+
+// this function recalculates the current streak of a habit based on its log
+void recalculate_streak(app_data &data, habit &h)
+{
+    int streak = 0;
+    int day_index = data.current_day % 28;
+
+    // Count consecutive days from today backwards until a missed day is found
+    for (int i = day_index; i >= 0; i--)
+    {
+        if (h.log[i])
+            streak++;
+        else
+            break;
+    }
+
+    //store the calculated streak in the habit
+    h.current_streak = streak;
+}
+
+// this function checks off a habit for the current day and updates its streak
+void check_habit(app_data &data)
+{
+    // Check if there are any habits to check off
+    if (data.habit_count == 0)
+    {
+        write_line("No habits to check.");
+        return;
+    }
+
+    // Display current habits
+    write_line("Current Habits: ");
+    for (int i = 0; i < data.habit_count; i++)
+    {
+        write_line(to_string(i + 1) + ". " + data.habits[i].name);
+    }
+
+    // Get the index of the habit to check off from the user
+    int index = read_integer("Enter the index of the habit to check off: ") - 1;
+
+    // Validate the index
+    if (index < 0 || index >= data.habit_count)
+    {
+        write_line("Invalid index.");
+        return;
+    }
+
+    // Mark the habit as completed for today and update the streak
+    today_index = data.current_day % 28;
+    data.habits[index].log[today_index] = true;
+    recalculate_streak(data, data.habits[index]);
+    write_line("Habit checked off successfully!");
+
+    // Congratulate the user if they have reached their target
+    if (data.habits[index].current_streak >= data.habits[index].target)
+    { 
+        write_line();  
+        write_line("Congratulations! You've reached your target for the habit: " + data.habits[index].name);
+        write_line("After celebrating, consider setting a new target.");
+        data.habits[index].target = read_integer("Enter new target (number of days): "); // Prompt for new target
+    }
+}
+
+// functions to update name of a habit
+void update_name(habit &data)
+{
+    data.name = read_string("Enter new habit name: ");
+    write_line("Habit name updated successfully!");
+}
+
+// function to update target of a habit
+void update_target(habit &data)
+{
+    data.target = read_integer("Enter new target (number of days): ");
+    write_line("Habit target updated successfully!");
+}
+
+// function to update current streak of a habit
+void update_streak(habit &data)
+{
+    data.current_streak = read_integer("Enter new current streak: ");
+    do 
+    {
+        write_line("Invalid streak value. It must be between 0 and 28.");
+        data.current_streak = read_integer("Enter new current streak: ");
+    } while (data.current_streak < 0 || data.current_streak > 28);
+    write_line("Habit current streak updated successfully!");
+}
+
+// function to update category of a habit
+void update_category(habit &data)
+{
+    write_line("Select new category:");
+    write_line("1. Health");
+    write_line("2. Fitness");
+    write_line("3. Study");
+    write_line("4. Hobby");
+    write_line("5. Other");
+    int category_choice = read_integer("Enter your choice: ", 1, 5);
+    data.category = (categories)(category_choice - 1);
+    write_line("Habit category updated successfully!");
+}
+
+// this function updates the details of a habit in the application data
+void update_habit(app_data &data)
+{
+    // Check if there are any habits to update
+    if (data.habit_count == 0)
+    {
+        write_line("No habits to update.");
+        return;
+    }
+
+    // Display current habits
+    write_line("Current Habits: ");
+    for (int i = 0; i < data.habit_count; i++)
+    {
+        write_line(to_string(i + 1) + ". " + data.habits[i].name);
+    }
+
+    // Get the index of the habit to update from the user
+    int index = read_integer("Enter the index of the habit to update: ") - 1;
+
+    // Validate the index
+    if (index < 0 || index >= data.habit_count)
+    {
+        write_line("Invalid index.");
+        return;
+    }
+
+    // Display update options to the user
+    write_line("Select an Option to Update:");
+    write_line("1. Name");  
+    write_line("2. Target");
+    write_line("3. Current Streak");
+    write_line("4. Category");
+    write_line("5. All");
+    write_line("6. Back to Main Menu");
+
+    // Get the user's choice and perform the corresponding update
+    int choice = read_integer("Enter your choice: ", 1, 6);
+    while (choice != 6)
+    {
+        switch (choice)
+        {
+        case 1:
+            update_name(data.habits[index]);
+            break;
+        case 2:
+            update_target(data.habits[index]);
+            break;
+        case 3:
+            update_streak(data.habits[index]);
+            break;
+        case 4:
+            update_category(data.habits[index]);
+            break;
+        case 5:
+            update_name(data.habits[index]);
+            update_target(data.habits[index]);
+            update_streak(data.habits[index]);
+            update_category(data.habits[index]);
+            break;
+        default:
+            write_line("Invalid choice. Please try again.");
+            break;
+        }
+        choice = read_integer("Enter your choice: ", 1, 5);
+    }
+    
+    // Confirm update to the user
+    write_line("Habits updated successfully!");
+}
+
+// this function advances the application to the next day and updates habit logs and streaks
+void next_day(app_data &data, habit &h)
+{
+    // Update each habit's log and streak for the new day
+    for (int i = 0; i < data.habit_count; i++)
+    {
+        today_index = data.current_day % 28;
+        if (data.habits[i].log[today_index] == true) // if the habit was completed today, keep it marked as completed
+        {
+            (data.habits[i].log[today_index] = true);
+        }
+        else // if the habit was not completed today, mark it as missed and reset the streak
+        {
+            data.habits[i].log[today_index] = false;
+            data.habits[i].current_streak = 0;
+        }
+    }
+    data.current_day++; // Move to the next day
+    write_line("Moved to the next day: Day " + to_string(data.current_day)); // Inform the user of the new day
+}
+
+// this function pauses the program until the user presses Enter
+void pause_for_user()
+{
+    write_line();
+    write_line("Press Enter to continue...");
+    read_line();
+}
+
+// this is the main function that runs the habit tracker application
+int main()
+{
+    app_data data; // create an instance of app_data to hold the application state
+    habit h; // create an instance of habit for temporary use
+    data.habit_count = 0; // initialize habit count to 0
+    data.current_day = 1; // initialize current day to 1
+
+    // Display welcome message and application info
+    write_line("Welcome to the Habit Tracker!");
+    write_line("Track your habits and stay motivated!");
+    write_line("Developed by Erin");
+    write_line("================================");
+    write_line("  Day 1 of your habit journey!");
+
+    // main menu loop
+    int choice;
+    do
+    {
+        write("================================");
+        write_line("\n           Main Menu:");
+        write_line("================================");
+        write_line("1. Add Habit");
+        write_line("2. Remove Habit");
+        write_line("3. Update Habit");
+        write_line("4. Check Habit");
+        write_line("5. View Habit Report");
+        write_line("6. Next Day");
+        write_line("7. Exit");
+
+        // get user choice
+        choice = read_integer("Enter your choice: ", 1, 7);
+
+        // handle user choice
+        switch (choice)
+        {
+        case 1:
+            write_line();
+            add_habit(data);
+            pause_for_user();
+            break;
+        case 2:
+            write_line();
+            remove_habit(data);
+            pause_for_user();
+            break;
+        case 3:
+            write_line();
+            update_habit(data);
+            pause_for_user();
+            break;
+        case 4:
+            write_line();
+            check_habit(data);
+            pause_for_user();
+            break;
+        case 5:
+            write_line();
+            habit_report(data);
+            pause_for_user();
+            break;
+        case 6:
+            write_line();
+            next_day(data, h);
+            pause_for_user();
+            break;
+        case 7:
+            write_line();
+            write_line("Exiting the application. Goodbye!");
+            break;
+        default:
+            write_line();
+            write_line("Invalid choice. Please try again.");
+            break;
+        }
+    } while (choice != 7);
+
+    return 0;
+}
