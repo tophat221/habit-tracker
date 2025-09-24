@@ -1,0 +1,12 @@
+# build outputs
+*.o
+*.exe
+*.out
+
+# logs
+*.log
+
+# OS/editor files
+.DS_Store
+.vscode/
+.idea/
