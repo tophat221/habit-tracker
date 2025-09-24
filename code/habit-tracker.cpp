@@ -3,6 +3,8 @@
 #include "utilities.h"
 #include <chrono>
 #include <ctime>
+#include <fstream>
+#include <sstream>
 
 using std::to_string;
 
@@ -369,12 +371,87 @@ void pause_for_user()
     read_line();
 }
 
+void save_data(const app_data &data, const std::string &filename)
+{
+    std::ofstream file(filename);
+    if (!file.is_open())
+    {
+        return;
+    }
+
+    for (int i = 0; i < data.count; i++)
+    {
+        const habit &h = data.habits[i];
+        file << h.name << ","
+             << h.target << ","
+             << h.current_streak << ","
+             << h.category;
+        for (int j = 0; j < 28; j++)
+        {
+            file << "," << h.log[j];
+        }
+        file << "\n";
+    }
+}
+
+void load_data(app_data &data, const std::string &filename)
+{
+    std::ifstream file(filename);
+    if (!file.is_open())
+    {
+        return;
+    }
+
+    std::string line;
+    while (std::getline(file, line))
+    {
+        habit h;
+        std::stringstream ss(line);
+        std::string token;
+
+        std::getline(ss, h.name, ',');
+        std::getline(ss, token, ',');
+        h.target = std::stoi(token);
+        std::getline(ss, token, ',');
+        h.current_streak = std::stoi(token);
+        std::getline(ss, token, ',');
+        h.category = (categories)std::stoi(token);
+
+        for (int i = 0; i < 28; i++)
+        {
+            std::getline(ss, token, ',');
+            h.log[i] = std::stoi(token);
+        }
+
+        if (data.count < data.size)
+        {
+            data.habits[data.count] = h;
+            data.count++;
+        }
+        else
+        {
+            habit *newArray = new habit[data.size * 2];
+            for (int i = 0; i < data.size; i++)
+            {
+                newArray[i] = data.habits[i];
+            }
+            delete[] data.habits;
+            data.habits = newArray;
+            data.size *= 2;
+            data.habits[data.count] = h;
+            data.count++;
+        }
+    }
+}
+
 // this is the main function that runs the habit tracker application
 int main()
 {
     app_data data; // create an instance of app_data to hold the application state
     habit h; // create an instance of habit for temporary use
     data.count = 0; // initialize habit count to 0
+
+    load_data(data, "habits.csv");
 
     // Display welcome message and application info
     write_line("Welcome to the Habit Tracker!");
@@ -395,7 +472,7 @@ int main()
         write_line("3. Update Habit");
         write_line("4. Check Habit");
         write_line("5. View Habit Report");
-        write_line("7. Exit");
+        write_line("6. Exit");
 
         // get user choice
         choice = read_integer("Enter your choice: ", 1, 6);
@@ -437,7 +514,8 @@ int main()
             write_line("Invalid choice. Please try again.");
             break;
         }
-    } while (choice != 7);
+    } while (choice != 6);
 
+    save_data(data, "habits.csv");
     return 0;
 }
