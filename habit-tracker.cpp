@@ -4,8 +4,7 @@
 
 using std::to_string;
 
-// define the size of the habit array and the current day index
-const int SIZE = 100;
+// define the current day index
 int today_index = 0;
 
 // this enum defines the categories of habits
@@ -31,8 +30,9 @@ struct habit
 // this struct defines the application data
 struct app_data
 {
-    habit habits[SIZE];
-    int habit_count;
+    habit *habits = new habit[2];
+    int count = 0;
+    int size = 2;
     int current_day;
 };
 
@@ -59,11 +59,6 @@ string category_to_string(categories category)
 // this function adds a new habit to the application data
 void add_habit(app_data &data)
 {
-    if (data.habit_count >= SIZE) // Check if we can add more habits
-    {
-        write_line("Habit limit reached. Cannot add more habits.");
-        return;
-    }
 
     habit new_habit; // Create a new habit instance
 
@@ -86,12 +81,27 @@ void add_habit(app_data &data)
     {
         new_habit.log[i] = false;
     }
-
     new_habit.current_streak = 0;
     
     // Add the new habit to the data.habits array
-    data.habits[data.habit_count] = new_habit;
-    data.habit_count++;
+    if (data.count < data.size)
+    {
+        data.habits[data.count] = new_habit;
+        data.count++;
+    }
+    else // Resize the array if needed
+    {
+        habit *newArray = new habit[data.size * 2];
+        for (int i = 0; i < data.size; i++)
+        {
+            newArray[i] = data.habits[i];
+        }
+        delete[] data.habits;
+        data.habits = newArray;
+        data.size *= 2;
+        data.habits[data.count] = new_habit;
+        data.count++;
+    }
 
     // Confirm addition to the user
     write_line("Habit added successfully!");
@@ -101,7 +111,7 @@ void add_habit(app_data &data)
 void remove_habit(app_data &data)
 {
     // Check if there are any habits to remove
-    if (data.habit_count == 0)
+    if (data.count == 0)
     {
         write_line("No habits to remove.");
         return;
@@ -109,7 +119,7 @@ void remove_habit(app_data &data)
 
     // Display current habits
     write_line("Current Habits: ");
-    for (int i = 0; i < data.habit_count; i++)
+    for (int i = 0; i < data.count; i++)
     {
         write_line(to_string(i + 1) + ". " + data.habits[i].name);
     }
@@ -118,18 +128,30 @@ void remove_habit(app_data &data)
     int index = read_integer("Enter the index of the habit to remove: ") - 1;
 
     // Validate the index
-    if (index < 0 || index >= data.habit_count)
+    if (index < 0 || index >= data.count)
     {
         write_line("Invalid index.");
         return;
     }
 
     // Shift habits to remove the selected habit
-    for (int i = index; i < data.habit_count - 1; i++)
+    for (int i = index; i < data.count - 1; i++)
     {
         data.habits[i] = data.habits[i + 1];
     }
-    data.habit_count--;
+    data.count--;
+
+    if (data.count > 0 && data.count <= data.size / 4 && data.size > 2) // Resize the array if needed
+    {
+        habit *newArray = new habit[data.size / 2];
+        for (int i = 0; i < data.count; i++)
+        {
+            newArray[i] = data.habits[i];
+        }
+        delete[] data.habits;
+        data.habits = newArray;
+        data.size /= 2;
+    }
 
     // Confirm removal to the user
     write_line("Habit removed successfully!");
@@ -140,7 +162,7 @@ void remove_habit(app_data &data)
 void habit_report(const app_data &data)
 {
     // Check if there are any habits to report
-    if (data.habit_count == 0)
+    if (data.count == 0)
     {
         write_line("No habits to report.");
         return;
@@ -148,7 +170,7 @@ void habit_report(const app_data &data)
 
     // Display the habit report
     write_line("Habit Report:");
-    for (int i = 0; i < data.habit_count; i++)
+    for (int i = 0; i < data.count; i++)
     {
         const habit &h = data.habits[i];
         write_line("Habit: " + h.name + ", Target: " + to_string(h.target) + ", Current Streak: " + to_string(h.current_streak) + ", Category: " + category_to_string(h.category));
@@ -178,7 +200,7 @@ void recalculate_streak(app_data &data, habit &h)
 void check_habit(app_data &data)
 {
     // Check if there are any habits to check off
-    if (data.habit_count == 0)
+    if (data.count == 0)
     {
         write_line("No habits to check.");
         return;
@@ -186,7 +208,7 @@ void check_habit(app_data &data)
 
     // Display current habits
     write_line("Current Habits: ");
-    for (int i = 0; i < data.habit_count; i++)
+    for (int i = 0; i < data.count; i++)
     {
         write_line(to_string(i + 1) + ". " + data.habits[i].name);
     }
@@ -195,7 +217,7 @@ void check_habit(app_data &data)
     int index = read_integer("Enter the index of the habit to check off: ") - 1;
 
     // Validate the index
-    if (index < 0 || index >= data.habit_count)
+    if (index < 0 || index >= data.count)
     {
         write_line("Invalid index.");
         return;
@@ -261,7 +283,7 @@ void update_category(habit &data)
 void update_habit(app_data &data)
 {
     // Check if there are any habits to update
-    if (data.habit_count == 0)
+    if (data.count == 0)
     {
         write_line("No habits to update.");
         return;
@@ -269,7 +291,7 @@ void update_habit(app_data &data)
 
     // Display current habits
     write_line("Current Habits: ");
-    for (int i = 0; i < data.habit_count; i++)
+    for (int i = 0; i < data.count; i++)
     {
         write_line(to_string(i + 1) + ". " + data.habits[i].name);
     }
@@ -278,7 +300,7 @@ void update_habit(app_data &data)
     int index = read_integer("Enter the index of the habit to update: ") - 1;
 
     // Validate the index
-    if (index < 0 || index >= data.habit_count)
+    if (index < 0 || index >= data.count)
     {
         write_line("Invalid index.");
         return;
@@ -332,7 +354,7 @@ void update_habit(app_data &data)
 void next_day(app_data &data, habit &h)
 {
     // Update each habit's log and streak for the new day
-    for (int i = 0; i < data.habit_count; i++)
+    for (int i = 0; i < data.count; i++)
     {
         today_index = data.current_day % 28;
         if (data.habits[i].log[today_index] == true) // if the habit was completed today, keep it marked as completed
@@ -362,7 +384,7 @@ int main()
 {
     app_data data; // create an instance of app_data to hold the application state
     habit h; // create an instance of habit for temporary use
-    data.habit_count = 0; // initialize habit count to 0
+    data.count = 0; // initialize habit count to 0
     data.current_day = 1; // initialize current day to 1
 
     // Display welcome message and application info

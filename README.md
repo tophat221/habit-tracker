@@ -8,7 +8,6 @@ Simple habit tracker (C++ / SplashKit) for SIT102 — Erin.
 - Save/load to file (persistence)
 - Simple text UI (terminal) — optional GUI in `src/gui/`
 
-## Build (Linux)
-```bash
-g++ -std=c++17 src/*.cpp -I include -o habit_tracker
-./habit_tracker
+## Build (Ubuntu)
+clang++ habit-tracker.cpp ../Utilities/utilities.cpp -I../Utilities -l SplashKit -o habit
+./habit
