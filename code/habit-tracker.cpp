@@ -1,11 +1,20 @@
 // this section includes packages 
 #include "splashkit.h" 
 #include "utilities.h"
+#include <chrono>
+#include <ctime>
 
 using std::to_string;
 
 // define the current day index
 int today_index = 0;
+int get_today_index()
+{
+    std::time_t t = std::time(nullptr);
+    std::tm* local_time = std::localtime(&t);
+
+    return local_time->tm_yday % 28; // Return the day of the year modulo 28
+}
 
 // this enum defines the categories of habits
 enum categories
@@ -33,7 +42,6 @@ struct app_data
     habit *habits = new habit[2];
     int count = 0;
     int size = 2;
-    int current_day;
 };
 
 // this function converts a category enum to a string representation to display to the user
@@ -158,6 +166,26 @@ void remove_habit(app_data &data)
 
 }
 
+// this function recalculates the current streak of a habit based on its log
+void recalculate_streak(habit &h)
+{
+    int streak = 0;
+    int day_index = get_today_index();
+
+    // Count consecutive days from today backwards until a missed day is found
+    for (int i = 0; i < 0; i++)
+    {
+        int index = (today_index - i + 28) % 28; // Wrap around using modulo
+        if (h.log[index])
+            streak++;
+        else
+            break;
+    }
+
+    //store the calculated streak in the habit
+    h.current_streak = streak;
+}
+
 // this function generates a report of all habits in the application data
 void habit_report(const app_data &data)
 {
@@ -172,28 +200,11 @@ void habit_report(const app_data &data)
     write_line("Habit Report:");
     for (int i = 0; i < data.count; i++)
     {
+        recalculate_streak(data.habits[i]);
+
         const habit &h = data.habits[i];
         write_line("Habit: " + h.name + ", Target: " + to_string(h.target) + ", Current Streak: " + to_string(h.current_streak) + ", Category: " + category_to_string(h.category));
     }
-}
-
-// this function recalculates the current streak of a habit based on its log
-void recalculate_streak(app_data &data, habit &h)
-{
-    int streak = 0;
-    int day_index = data.current_day % 28;
-
-    // Count consecutive days from today backwards until a missed day is found
-    for (int i = day_index; i >= 0; i--)
-    {
-        if (h.log[i])
-            streak++;
-        else
-            break;
-    }
-
-    //store the calculated streak in the habit
-    h.current_streak = streak;
 }
 
 // this function checks off a habit for the current day and updates its streak
@@ -224,9 +235,9 @@ void check_habit(app_data &data)
     }
 
     // Mark the habit as completed for today and update the streak
-    today_index = data.current_day % 28;
+    int today_index = get_today_index();
     data.habits[index].log[today_index] = true;
-    recalculate_streak(data, data.habits[index]);
+    recalculate_streak(data.habits[index]);
     write_line("Habit checked off successfully!");
 
     // Congratulate the user if they have reached their target
@@ -350,27 +361,6 @@ void update_habit(app_data &data)
     write_line("Habits updated successfully!");
 }
 
-// this function advances the application to the next day and updates habit logs and streaks
-void next_day(app_data &data, habit &h)
-{
-    // Update each habit's log and streak for the new day
-    for (int i = 0; i < data.count; i++)
-    {
-        today_index = data.current_day % 28;
-        if (data.habits[i].log[today_index] == true) // if the habit was completed today, keep it marked as completed
-        {
-            (data.habits[i].log[today_index] = true);
-        }
-        else // if the habit was not completed today, mark it as missed and reset the streak
-        {
-            data.habits[i].log[today_index] = false;
-            data.habits[i].current_streak = 0;
-        }
-    }
-    data.current_day++; // Move to the next day
-    write_line("Moved to the next day: Day " + to_string(data.current_day)); // Inform the user of the new day
-}
-
 // this function pauses the program until the user presses Enter
 void pause_for_user()
 {
@@ -385,7 +375,6 @@ int main()
     app_data data; // create an instance of app_data to hold the application state
     habit h; // create an instance of habit for temporary use
     data.count = 0; // initialize habit count to 0
-    data.current_day = 1; // initialize current day to 1
 
     // Display welcome message and application info
     write_line("Welcome to the Habit Tracker!");
@@ -406,11 +395,10 @@ int main()
         write_line("3. Update Habit");
         write_line("4. Check Habit");
         write_line("5. View Habit Report");
-        write_line("6. Next Day");
         write_line("7. Exit");
 
         // get user choice
-        choice = read_integer("Enter your choice: ", 1, 7);
+        choice = read_integer("Enter your choice: ", 1, 6);
 
         // handle user choice
         switch (choice)
@@ -441,11 +429,6 @@ int main()
             pause_for_user();
             break;
         case 6:
-            write_line();
-            next_day(data, h);
-            pause_for_user();
-            break;
-        case 7:
             write_line();
             write_line("Exiting the application. Goodbye!");
             break;
