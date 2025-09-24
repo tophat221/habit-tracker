@@ -175,9 +175,9 @@ void recalculate_streak(habit &h)
     int day_index = get_today_index();
 
     // Count consecutive days from today backwards until a missed day is found
-    for (int i = 0; i < 0; i++)
+    for (int i = 0; i < 28; i++)
     {
-        int index = (today_index - i + 28) % 28; // Wrap around using modulo
+        int index = (day_index - i + 28) % 28; // Wrap around using modulo
         if (h.log[index])
             streak++;
         else
@@ -186,6 +186,33 @@ void recalculate_streak(habit &h)
 
     //store the calculated streak in the habit
     h.current_streak = streak;
+}
+
+// this function generates a progress bar for a habit based on its current streak and target
+string progress_bar(const habit &h, int bar_width = 20)
+{
+    // Calculate progress as a fraction of the target
+    double progress = (double)h.current_streak / h.target;
+    if (progress > 1.0)
+    {
+        progress = 1.0; // Cap at 100%
+    }
+
+    // Generate the progress bar string
+    int pos = static_cast<int>(bar_width * progress);
+    string bar = "[";
+    for (int i = 0; i < bar_width; i++)
+    {
+        if (i < pos)
+            bar += "#";
+        else 
+            bar += "-";
+    }
+    bar += "] ";
+    int percent = static_cast<int>(progress * 100);
+    bar += to_string(percent) + "%";
+    
+    return bar;
 }
 
 // this function generates a report of all habits in the application data
@@ -206,6 +233,8 @@ void habit_report(const app_data &data)
 
         const habit &h = data.habits[i];
         write_line("Habit: " + h.name + ", Target: " + to_string(h.target) + ", Current Streak: " + to_string(h.current_streak) + ", Category: " + category_to_string(h.category));
+        write_line(progress_bar(h));
+        write_line();
     }
 }
 
