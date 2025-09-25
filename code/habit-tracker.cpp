@@ -5,18 +5,61 @@
 #include <ctime>
 #include <fstream>
 #include <sstream>
+#include <termios.h>
+#include <unistd.h>
+#include <openssl/sha.h>
+#include <iomanip>  
+#include <filesystem>
+#include <iostream>
 
 using std::to_string;
 
-// define the current day index
-int today_index = 0;
-int get_today_index()
+string get_password(const string &prompt)
 {
-    std::time_t t = std::time(nullptr);
-    std::tm* local_time = std::localtime(&t);
+    termios oldt, newt;
+    tcgetattr(STDIN_FILENO, &oldt);       // Save current terminal attributes
+    newt = oldt;
+    newt.c_lflag &= ~(ECHO);              // Disable echo
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
 
-    return local_time->tm_yday % 28; // Return the day of the year modulo 28
+    string password = read_string(prompt);
+
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt); // Restore old terminal attributes
+    write_line(); // move to next line after password input
+    return password;
 }
+
+
+string hash_password(const string &password)
+{
+    unsigned char hash[SHA256_DIGEST_LENGTH]; // 32 bytes
+    SHA256((unsigned char*)password.c_str(), password.size(), hash);
+
+    std::stringstream ss;
+    for (int i = 0; i < SHA256_DIGEST_LENGTH; i++)
+    {
+        ss << std::hex << std::setw(2) << std::setfill('0') << (int)hash[i];
+    }
+    return ss.str();
+}
+
+
+string credential_filename(const string &username)
+{
+    return "users/" + username + ".cred";
+}
+
+string save_filename(const string &username)
+{
+    return "saves/" + username + ".save";
+}
+
+struct user
+{
+    string correct_username;
+    string correct_password;
+    string user_name;
+};
 
 // this enum defines the categories of habits
 enum categories
@@ -42,9 +85,124 @@ struct habit
 struct app_data
 {
     habit *habits = new habit[2];
+    user *users = new user[2];
     int count = 0;
     int size = 2;
+    int user_count = 0;
+    int user_size = 2;
 };
+
+void sign_up(app_data &data, string &active_user)
+{
+    user new_user;
+    string password, confirm_password;
+
+    write_line("Please enter information to continue.");
+
+    do
+    {
+        new_user.correct_username = read_string("Choose a username: ");
+
+        password = get_password("Choose a password: ");
+        confirm_password = get_password("Confirm your password: ");
+
+        if (password == confirm_password)
+        {
+            new_user.correct_password = hash_password(password);
+            active_user = new_user.correct_username;
+            break;
+        }
+        else
+        {
+            write_line("Passwords do not match. Please try again.");
+        }
+        write_line();
+    } while (password != confirm_password);
+
+    write("Enter your name: ");
+    new_user.user_name = read_line();
+    write_line("Welcome, " + new_user.user_name + "!");
+
+    // Add the new user to the array
+    if (data.user_count < data.user_size)
+    {
+        data.users[data.user_count] = new_user;
+        data.user_count++;
+    }
+    else
+    {
+        user *newArray = new user[data.user_size * 2];
+        for (int i = 0; i < data.user_count; i++)
+            newArray[i] = data.users[i];
+        delete[] data.users;
+        data.users = newArray;
+        data.user_size *= 2;
+        data.users[data.user_count] = new_user;
+        data.user_count++;
+    }
+
+    // Save credentials to file
+    std::ofstream cred(credential_filename(new_user.correct_username));
+    cred << new_user.correct_username << "\n"
+         << new_user.correct_password << "\n"
+         << new_user.user_name << "\n";
+    cred.close();
+
+    std::ofstream save(save_filename(new_user.correct_username));
+    save.close();
+}
+
+void login(app_data &data, string &active_user)
+{
+    string entered_username, entered_password;
+
+    write_line("Please log in to continue.");
+
+    while (true)
+    {
+        entered_username = read_string("Username: ");
+        entered_password = get_password("Password: ");
+
+        std::ifstream cred(credential_filename(entered_username));
+        if (!cred.is_open())
+        {
+            write_line("User not found. Please try again.");
+            continue;
+        }
+
+        string stored_username, stored_hash, stored_name;
+        getline(cred, stored_username);
+        getline(cred, stored_hash);
+        getline(cred, stored_name);
+        cred.close();
+
+        if (entered_username == stored_username && hash_password(entered_password) == stored_hash)
+        {
+            write_line("Login successful! Welcome back, " + stored_username + "!");
+            active_user = stored_username;
+            break;
+        }
+        else
+        {
+            write_line("Invalid username or password. Please try again.");
+        }
+
+        if (entered_username == "exit" || entered_password == "exit")
+        {
+            write_line("Exiting the application. Goodbye!");
+            return;
+        }
+    }
+}
+
+// define the current day index
+int get_today_index()
+{
+    std::time_t t = std::time(nullptr);
+    std::tm* local_time = std::localtime(&t);
+
+    return local_time->tm_yday % 28; // Return the day of the year modulo 28
+}
 
 // this function converts a category enum to a string representation to display to the user
 string category_to_string(categories category)
@@ -405,6 +563,7 @@ void save_data(const app_data &data, const std::string &filename)
     std::ofstream file(filename);
     if (!file.is_open())
     {
+        write_line("Error opening file for saving data.");
         return;
     }
 
@@ -428,6 +587,7 @@ void load_data(app_data &data, const std::string &filename)
     std::ifstream file(filename);
     if (!file.is_open())
     {
+        write_line("Error opening file for loading data.");
         return;
     }
 
@@ -473,21 +633,51 @@ void load_data(app_data &data, const std::string &filename)
     }
 }
 
+// function to handle application exit and data saving
+void exit_app(app_data &data, const string &active_user)
+{
+    if (!active_user.empty())
+    {
+        save_data(data, save_filename(active_user));
+        write_line("Data saved. Exiting application.");
+    }
+}
+
 // this is the main function that runs the habit tracker application
 int main()
 {
     app_data data; // create an instance of app_data to hold the application state
-    habit h; // create an instance of habit for temporary use
     data.count = 0; // initialize habit count to 0
+    std::filesystem::create_directories("users");
+    std::filesystem::create_directories("saves");
 
-    load_data(data, "habits.csv");
 
     // Display welcome message and application info
     write_line("Welcome to the Habit Tracker!");
     write_line("Track your habits and stay motivated!");
     write_line("Developed by Erin");
     write_line("================================");
-    write_line("  Day 1 of your habit journey!");
+    write_line();
+    write_line("Login or Sign Up to Continue:");
+    write_line("1. Login");
+    write_line("2. Sign Up");
+    write_line();
+
+      
+    string active_user; // to track the currently logged-in user
+    int option = read_integer("Enter your choice: ", 1, 2);
+    if (option == 1)
+    {
+        login(data, active_user);
+    }
+    else
+    {
+        sign_up(data, active_user);
+        active_user = data.users[data.user_count - 1].correct_username; // Set active user to the newly signed-up user
+    }
+
+    // load existing data from file
+    load_data(data, save_filename(active_user));
 
     // main menu loop
     int choice;
@@ -536,7 +726,6 @@ int main()
             break;
         case 6:
             write_line();
-            write_line("Exiting the application. Goodbye!");
             break;
         default:
             write_line();
@@ -545,6 +734,6 @@ int main()
         }
     } while (choice != 6);
 
-    save_data(data, "habits.csv");
+    exit_app(data, active_user); // Save data and exit
     return 0;
 }
