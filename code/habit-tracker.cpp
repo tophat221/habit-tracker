@@ -1,7 +1,6 @@
 // this section includes packages 
 #include "splashkit.h" 
 #include "utilities.h"
-#include <chrono>
 #include <ctime>
 #include <fstream>
 #include <sstream>
@@ -10,10 +9,11 @@
 #include <openssl/sha.h>
 #include <iomanip>  
 #include <filesystem>
-#include <iostream>
+#include <string> 
 
 using std::to_string;
 
+// function to prevent the printing of the password to the terminal when a user types 
 string get_password(const string &prompt)
 {
     termios oldt, newt;
@@ -29,7 +29,7 @@ string get_password(const string &prompt)
     return password;
 }
 
-
+// function to hash password before storing in save file 
 string hash_password(const string &password)
 {
     unsigned char hash[SHA256_DIGEST_LENGTH]; // 32 bytes
@@ -43,17 +43,19 @@ string hash_password(const string &password)
     return ss.str();
 }
 
-
+// function to return the credential file for the specific user
 string credential_filename(const string &username)
 {
     return "users/" + username + ".cred";
 }
 
+// function to return the save file for specific user
 string save_filename(const string &username)
 {
     return "saves/" + username + ".save";
 }
 
+// struct to determine variables for each user
 struct user
 {
     string correct_username;
@@ -71,15 +73,25 @@ enum categories
     OTHER
 };
 
-// this struct defines the properties of a habit
+// this struct defines habit
 struct habit
 {
     string name;
     int target;
     int current_streak;
     categories category;
-    bool log[28];
+    bool* log;          // dynamic array
+    int log_size;        // current size of the log
+    int last_day_index;  // last day the habit was updated
 };
+
+// function to determine the day of the year 
+int get_today_index()
+{
+    std::time_t t = std::time(nullptr);
+    std::tm* local_time = std::localtime(&t);
+    return local_time->tm_yday; 
+}
 
 // this struct defines the application data
 struct app_data
@@ -92,6 +104,7 @@ struct app_data
     int user_size = 2;
 };
 
+// this function allows a user to create a new account 
 void sign_up(app_data &data, string &active_user)
 {
     user new_user;
@@ -99,6 +112,7 @@ void sign_up(app_data &data, string &active_user)
 
     write_line("Please enter information to continue.");
 
+    // loop until user enters valid username and password
     do
     {
         new_user.correct_username = read_string("Choose a username: ");
@@ -119,6 +133,7 @@ void sign_up(app_data &data, string &active_user)
         write_line();
     } while (password != confirm_password);
 
+    // add user name to the data
     write("Enter your name: ");
     new_user.user_name = read_line();
     write_line("Welcome, " + new_user.user_name + "!");
@@ -148,34 +163,41 @@ void sign_up(app_data &data, string &active_user)
          << new_user.user_name << "\n";
     cred.close();
 
+    // Create a save file for habit data
     std::ofstream save(save_filename(new_user.correct_username));
     save.close();
 }
 
+// function to allow users to login 
 void login(app_data &data, string &active_user)
 {
     string entered_username, entered_password;
 
     write_line("Please log in to continue.");
 
+    // loop until a user exits or enters a correct username and password
     while (true)
     {
         entered_username = read_string("Username: ");
         entered_password = get_password("Password: ");
 
+        // open and read relevant file
         std::ifstream cred(credential_filename(entered_username));
+        // if failed to open, inform user
         if (!cred.is_open())
         {
             write_line("User not found. Please try again.");
             continue;
         }
 
+        // retrieve information from the credentials file
         string stored_username, stored_hash, stored_name;
         getline(cred, stored_username);
         getline(cred, stored_hash);
         getline(cred, stored_name);
         cred.close();
 
+        // verify username and password 
         if (entered_username == stored_username && hash_password(entered_password) == stored_hash)
         {
             write_line("Login successful! Welcome back, " + stored_username + "!");
@@ -187,21 +209,13 @@ void login(app_data &data, string &active_user)
             write_line("Invalid username or password. Please try again.");
         }
 
+        // if user types exit, go back to login or signup page
         if (entered_username == "exit" || entered_password == "exit")
         {
-            write_line("Exiting the application. Goodbye!");
+            write_line("Exiting.");
             return;
         }
     }
-}
-
-// define the current day index
-int get_today_index()
-{
-    std::time_t t = std::time(nullptr);
-    std::tm* local_time = std::localtime(&t);
-
-    return local_time->tm_yday % 28; // Return the day of the year modulo 28
 }
 
 // this function converts a category enum to a string representation to display to the user
@@ -224,13 +238,32 @@ string category_to_string(categories category)
     }
 }
 
+// increase size of log if needed
+void update_log_for_today(habit &h)
+{
+    int today_index = get_today_index();
+    int days_passed = today_index - h.last_day_index;
+
+    // create new array, transfer data, delete old array
+    if (days_passed > 0)
+    {
+        bool* newLog = new bool[h.log_size + days_passed];
+        for (int i = 0; i < h.log_size; i++)
+            newLog[i] = h.log[i];
+        for (int i = h.log_size; i < h.log_size + days_passed; i++)
+            newLog[i] = false;
+
+        delete[] h.log;
+        h.log = newLog;
+        h.log_size += days_passed;
+        h.last_day_index = today_index;
+    }
+}
+
 // this function adds a new habit to the application data
 void add_habit(app_data &data)
 {
-
-    habit new_habit; // Create a new habit instance
-
-    // Get habit details from the user
+    habit new_habit;
     new_habit.name = read_string("Enter habit name: ");
     new_habit.target = read_integer("Enter target (number of days): ");
 
@@ -244,34 +277,31 @@ void add_habit(app_data &data)
     int category_choice = read_integer("Enter your choice: ", 1, 5);
     new_habit.category = (categories)(category_choice - 1);
 
-    // Initialize the log and current streak for the new habit
-    for (int i = 0; i < 28; i++)
-    {
-        new_habit.log[i] = false;
-    }
+    // Initialize dynamic log for tracking habit completion 
+    new_habit.log_size = 1;
+    new_habit.log = new bool[new_habit.log_size]{false};
     new_habit.current_streak = 0;
-    
-    // Add the new habit to the data.habits array
+    new_habit.last_day_index = get_today_index();
+
+    // Add to data.habits (dynamic array management same as before)
     if (data.count < data.size)
     {
         data.habits[data.count] = new_habit;
         data.count++;
     }
-    else // Resize the array if needed
+    else
     {
-        habit *newArray = new habit[data.size * 2];
+        habit* newArray = new habit[data.size * 2];
         for (int i = 0; i < data.size; i++)
-        {
             newArray[i] = data.habits[i];
-        }
         delete[] data.habits;
         data.habits = newArray;
         data.size *= 2;
         data.habits[data.count] = new_habit;
         data.count++;
     }
-
-    // Confirm addition to the user
+    
+    // confirm habit creation to user 
     write_line("Habit added successfully!");
 }
 
@@ -302,6 +332,9 @@ void remove_habit(app_data &data)
         return;
     }
 
+    // free dynamic memory allocated to the habit's log before removal 
+    delete[] data.habits[index].log; 
+
     // Shift habits to remove the selected habit
     for (int i = index; i < data.count - 1; i++)
     {
@@ -329,20 +362,20 @@ void remove_habit(app_data &data)
 // this function recalculates the current streak of a habit based on its log
 void recalculate_streak(habit &h)
 {
-    int streak = 0;
-    int day_index = get_today_index();
+    // ensures habits log is updated for the day
+    update_log_for_today(h);
 
-    // Count consecutive days from today backwards until a missed day is found
-    for (int i = 0; i < 28; i++)
+    int streak = 0;
+
+    // count consecutive days completed starting from most recent day
+    for (int i = h.log_size - 1; i >= 0; i--)
     {
-        int index = (day_index - i + 28) % 28; // Wrap around using modulo
-        if (h.log[index])
-            streak++;
+        if (h.log[i])
+            streak++; // increment for each consecutive day completed
         else
-            break;
+            break; // stop counting when missed day is encountered 
     }
 
-    //store the calculated streak in the habit
     h.current_streak = streak;
 }
 
@@ -399,43 +432,44 @@ void habit_report(const app_data &data)
 // this function checks off a habit for the current day and updates its streak
 void check_habit(app_data &data)
 {
-    // Check if there are any habits to check off
     if (data.count == 0)
     {
         write_line("No habits to check.");
         return;
     }
 
-    // Display current habits
-    write_line("Current Habits: ");
+    write_line("Current Habits:");
     for (int i = 0; i < data.count; i++)
-    {
         write_line(to_string(i + 1) + ". " + data.habits[i].name);
-    }
 
-    // Get the index of the habit to check off from the user
     int index = read_integer("Enter the index of the habit to check off: ") - 1;
-
-    // Validate the index
     if (index < 0 || index >= data.count)
     {
         write_line("Invalid index.");
         return;
     }
 
-    // Mark the habit as completed for today and update the streak
-    int today_index = get_today_index();
-    data.habits[index].log[today_index] = true;
-    recalculate_streak(data.habits[index]);
+    habit &h = data.habits[index];
+    update_log_for_today(h);          // grow log if needed
+    h.log[h.log_size - 1] = true;     // mark today as complete
+    recalculate_streak(h);
+
+    // inform user that habit was checked off successfully 
     write_line("Habit checked off successfully!");
 
-    // Congratulate the user if they have reached their target
-    if (data.habits[index].current_streak >= data.habits[index].target)
-    { 
-        write_line();  
-        write_line("Congratulations! You've reached your target for the habit: " + data.habits[index].name);
+    if (h.current_streak >= h.target)
+    {
+        write_line();
+        write_line("Congratulations! You've reached your target for the habit: " + h.name);
         write_line("After celebrating, consider setting a new target.");
-        data.habits[index].target = read_integer("Enter new target (number of days): "); // Prompt for new target
+        h.target = read_integer("Enter new target (number of days): ");
+    }
+
+    if (h.current_streak == 365)
+    {
+        write_line();
+        write_line("Congratulations! You have completed this habit for one whole year!");
+        write_line("You have mastered displine!");
     }
 }
 
@@ -461,7 +495,7 @@ void update_streak(habit &data)
     {
         write_line("Invalid streak value. It must be between 0 and 28.");
         data.current_streak = read_integer("Enter new current streak: ");
-    } while (data.current_streak < 0 || data.current_streak > 28);
+    } while (data.current_streak < 0);
     write_line("Habit current streak updated successfully!");
 }
 
@@ -543,7 +577,7 @@ void update_habit(app_data &data)
             write_line("Invalid choice. Please try again.");
             break;
         }
-        choice = read_integer("Enter your choice: ", 1, 5);
+        choice = read_integer("Enter your choice: ", 1, 6);
     }
     
     // Confirm update to the user
@@ -558,55 +592,64 @@ void pause_for_user()
     read_line();
 }
 
+// function to save the habit data 
 void save_data(const app_data &data, const std::string &filename)
-{
+{   
+    // open file
     std::ofstream file(filename);
+
+    // if file does not open, inform user of error
     if (!file.is_open())
     {
         write_line("Error opening file for saving data.");
         return;
     }
 
+    // seperate fields with commas and save to file
     for (int i = 0; i < data.count; i++)
     {
-        const habit &h = data.habits[i];
-        file << h.name << ","
-             << h.target << ","
-             << h.current_streak << ","
-             << h.category;
-        for (int j = 0; j < 28; j++)
+        habit &h = data.habits[i];
+        file << h.name << "," << h.target << "," << h.current_streak << "," << h.category << "," << h.log_size << "," << h.last_day_index;
+        for (int j = 0; j < h.log_size; j++)
         {
             file << "," << h.log[j];
         }
+        // seperate habits by line 
         file << "\n";
     }
 }
 
+// this function reads and loads the data from a save file for a particular user
 void load_data(app_data &data, const std::string &filename)
 {
+    // open file
     std::ifstream file(filename);
+
+    // if there is an error opening the file, inform user
     if (!file.is_open())
     {
         write_line("Error opening file for loading data.");
         return;
     }
 
+    // read file line by line, each line representing one habit 
     std::string line;
     while (std::getline(file, line))
     {
-        habit h;
-        std::stringstream ss(line);
+        std::stringstream ss(line); // parse CSV format
+        habit h; // temporary habit to populate 
         std::string token;
 
+        // read fiels in order 
         std::getline(ss, h.name, ',');
-        std::getline(ss, token, ',');
-        h.target = std::stoi(token);
-        std::getline(ss, token, ',');
-        h.current_streak = std::stoi(token);
-        std::getline(ss, token, ',');
-        h.category = (categories)std::stoi(token);
+        std::getline(ss, token, ','); h.target = std::stoi(token);
+        std::getline(ss, token, ','); h.current_streak = std::stoi(token);
+        std::getline(ss, token, ','); h.category = (categories)std::stoi(token);
+        std::getline(ss, token, ','); h.log_size = std::stoi(token);
+        std::getline(ss, token, ','); h.last_day_index = std::stoi(token);
 
-        for (int i = 0; i < 28; i++)
+        h.log = new bool[h.log_size];
+        for (int i = 0; i < h.log_size; i++)
         {
             std::getline(ss, token, ',');
             h.log[i] = std::stoi(token);
@@ -619,11 +662,9 @@ void load_data(app_data &data, const std::string &filename)
         }
         else
         {
-            habit *newArray = new habit[data.size * 2];
+            habit* newArray = new habit[data.size * 2];
             for (int i = 0; i < data.size; i++)
-            {
                 newArray[i] = data.habits[i];
-            }
             delete[] data.habits;
             data.habits = newArray;
             data.size *= 2;
@@ -643,11 +684,20 @@ void exit_app(app_data &data, const string &active_user)
     }
 }
 
+void cleanup(app_data &data)
+{
+    for (int i = 0; i < data.count; i++)
+    {
+        delete[] data.habits[i].log;
+    }
+    delete[] data.habits;
+    delete[] data.users;
+}
+
 // this is the main function that runs the habit tracker application
 int main()
 {
     app_data data; // create an instance of app_data to hold the application state
-    data.count = 0; // initialize habit count to 0
     std::filesystem::create_directories("users");
     std::filesystem::create_directories("saves");
 
@@ -673,7 +723,6 @@ int main()
     else
     {
         sign_up(data, active_user);
-        active_user = data.users[data.user_count - 1].correct_username; // Set active user to the newly signed-up user
     }
 
     // load existing data from file
@@ -735,5 +784,6 @@ int main()
     } while (choice != 6);
 
     exit_app(data, active_user); // Save data and exit
+    cleanup(data);
     return 0;
 }
