@@ -32,7 +32,7 @@ string get_password(const string &prompt)
 // function to hash password before storing in save file 
 string hash_password(const string &password)
 {
-    unsigned char hash[SHA256_DIGEST_LENGTH]; // 32 bytes
+    unsigned char hash[SHA256_DIGEST_LENGTH];
     SHA256((unsigned char*)password.c_str(), password.size(), hash);
 
     std::stringstream ss;
@@ -148,7 +148,9 @@ void sign_up(app_data &data, string &active_user)
     {
         user *newArray = new user[data.user_size * 2];
         for (int i = 0; i < data.user_count; i++)
+        {
             newArray[i] = data.users[i];
+        }
         delete[] data.users;
         data.users = newArray;
         data.user_size *= 2;
@@ -158,9 +160,7 @@ void sign_up(app_data &data, string &active_user)
 
     // Save credentials to file
     std::ofstream cred(credential_filename(new_user.correct_username));
-    cred << new_user.correct_username << "\n"
-         << new_user.correct_password << "\n"
-         << new_user.user_name << "\n";
+    cred << new_user.correct_username << "\n" << new_user.correct_password << "\n" << new_user.user_name << "\n";
     cred.close();
 
     // Create a save file for habit data
@@ -371,9 +371,13 @@ void recalculate_streak(habit &h)
     for (int i = h.log_size - 1; i >= 0; i--)
     {
         if (h.log[i])
+        {
             streak++; // increment for each consecutive day completed
+        }
         else
+        {
             break; // stop counting when missed day is encountered 
+        }
     }
 
     h.current_streak = streak;
@@ -395,9 +399,13 @@ string progress_bar(const habit &h, int bar_width = 20)
     for (int i = 0; i < bar_width; i++)
     {
         if (i < pos)
+        {
             bar += "#";
+        }
         else 
+        {
             bar += "-";
+        }
     }
     bar += "] ";
     int percent = static_cast<int>(progress * 100);
@@ -440,7 +448,9 @@ void check_habit(app_data &data)
 
     write_line("Current Habits:");
     for (int i = 0; i < data.count; i++)
+    {
         write_line(to_string(i + 1) + ". " + data.habits[i].name);
+    }
 
     int index = read_integer("Enter the index of the habit to check off: ") - 1;
     if (index < 0 || index >= data.count)
@@ -485,18 +495,6 @@ void update_target(habit &data)
 {
     data.target = read_integer("Enter new target (number of days): ");
     write_line("Habit target updated successfully!");
-}
-
-// function to update current streak of a habit
-void update_streak(habit &data)
-{
-    data.current_streak = read_integer("Enter new current streak: ");
-    do 
-    {
-        write_line("Invalid streak value. It must be between 0 and 28.");
-        data.current_streak = read_integer("Enter new current streak: ");
-    } while (data.current_streak < 0);
-    write_line("Habit current streak updated successfully!");
 }
 
 // function to update category of a habit
@@ -544,14 +542,13 @@ void update_habit(app_data &data)
     write_line("Select an Option to Update:");
     write_line("1. Name");  
     write_line("2. Target");
-    write_line("3. Current Streak");
-    write_line("4. Category");
-    write_line("5. All");
-    write_line("6. Back to Main Menu");
+    write_line("3. Category");
+    write_line("4. All");
+    write_line("5. Back to Main Menu");
 
     // Get the user's choice and perform the corresponding update
-    int choice = read_integer("Enter your choice: ", 1, 6);
-    while (choice != 6)
+    int choice = read_integer("Enter your choice: ", 1, 5);
+    while (choice != 5)
     {
         switch (choice)
         {
@@ -562,22 +559,18 @@ void update_habit(app_data &data)
             update_target(data.habits[index]);
             break;
         case 3:
-            update_streak(data.habits[index]);
-            break;
-        case 4:
             update_category(data.habits[index]);
             break;
-        case 5:
+        case 4:
             update_name(data.habits[index]);
             update_target(data.habits[index]);
-            update_streak(data.habits[index]);
             update_category(data.habits[index]);
             break;
         default:
             write_line("Invalid choice. Please try again.");
             break;
         }
-        choice = read_integer("Enter your choice: ", 1, 6);
+        choice = read_integer("Enter your choice: ", 1, 5);
     }
     
     // Confirm update to the user
@@ -748,42 +741,42 @@ int main()
         // handle user choice
         switch (choice)
         {
-        case 1:
-            write_line();
-            add_habit(data);
-            pause_for_user();
-            break;
-        case 2:
-            write_line();
-            remove_habit(data);
-            pause_for_user();
-            break;
-        case 3:
-            write_line();
-            update_habit(data);
-            pause_for_user();
-            break;
-        case 4:
-            write_line();
-            check_habit(data);
-            pause_for_user();
-            break;
-        case 5:
-            write_line();
-            habit_report(data);
-            pause_for_user();
-            break;
-        case 6:
-            write_line();
-            break;
-        default:
-            write_line();
-            write_line("Invalid choice. Please try again.");
-            break;
+            case 1:
+                write_line();
+                add_habit(data);
+                pause_for_user();
+                break;
+            case 2:
+                write_line();
+                remove_habit(data);
+                pause_for_user();
+                break;
+            case 3:
+                write_line();
+                update_habit(data);
+                pause_for_user();
+                break;
+            case 4:
+                write_line();
+                check_habit(data);
+                pause_for_user();
+                break;
+            case 5:
+                write_line();
+                habit_report(data);
+                pause_for_user();
+                break;
+            case 6:
+                write_line();
+                break;
+            default:
+                write_line();
+                write_line("Invalid choice. Please try again.");
+                break;
         }
     } while (choice != 6);
 
     exit_app(data, active_user); // Save data and exit
-    cleanup(data);
+    cleanup(data); // manage memory 
     return 0;
 }
